@@ -1,0 +1,96 @@
+import unittest
+import pandas as pd
+from sklearn.model_selection import train_test_split
+from sklearn.linear_model import LinearRegression
+from sklearn.metrics import mean_squared_error, r2_score
+from sklearn.ensemble import RandomForestRegressor
+from sklearn.preprocessing import LabelEncoder
+from sklearn.feature_selection import RFE
+
+# Sample test data for testing purposes
+# Assuming your data pipeline uses a dataset with 'property_size_sqm' and 'building_age'
+data = {
+    'property_size_sqm': [50, 100, 150, 200, 250],
+    'building_age': [10, 15, 20, 25, 30],
+    'rooms_en': [2, 3, 3, 4, 4],
+    'rooms_ar': [2, 3, 3, 4, 4],
+    'transaction_type_en': ['Sale', 'Sale', 'Lease', 'Lease', 'Sale'],
+}
+
+df = pd.DataFrame(data)
+
+X = df.drop(columns=['property_size_sqm'])
+y = df['property_size_sqm']
+
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+
+class TestPipeline(unittest.TestCase):
+
+    # Test feature selection using RFE
+    def test_rfe_feature_selection(self):
+        model = LinearRegression()
+        selector = RFE(model, n_features_to_select=2)
+        selector = selector.fit(X_train, y_train)
+
+        # Check if the selected features are correct (based on ranking)
+        selected_features = X_train.columns[selector.support_]
+        self.assertEqual(len(selected_features), 2, "Should select 2 features")
+        print(f"Selected features by RFE: {selected_features}")
+
+    # Test model training and prediction (using RandomForestRegressor)
+    def test_model_training_and_prediction(self):
+        rf_model = RandomForestRegressor(n_estimators=100, random_state=42)
+        rf_model.fit(X_train, y_train)
+        
+        y_pred = rf_model.predict(X_test)
+        
+        # Evaluate performance
+        rmse = mean_squared_error(y_test, y_pred, squared=False)
+        r2 = r2_score(y_test, y_pred)
+
+        self.assertTrue(rmse >= 0, "RMSE should be non-negative")
+        self.assertTrue(0 <= r2 <= 1, "R-squared should be between 0 and 1")
+        
+        print(f"RMSE: {rmse}")
+        print(f"R-squared: {r2}")
+
+    # Test label encoding
+    def test_label_encoding(self):
+        label_encoder = LabelEncoder()
+        X_train_encoded = X_train.copy()
+
+        # Encode the categorical feature 'transaction_type_en'
+        X_train_encoded['transaction_type_en'] = label_encoder.fit_transform(X_train_encoded['transaction_type_en'])
+
+        # Check if the encoding is applied correctly (the result should be integers)
+        self.assertTrue(X_train_encoded['transaction_type_en'].dtype == 'int32', "Label encoding failed")
+        print(f"Encoded 'transaction_type_en': {X_train_encoded['transaction_type_en']}")
+
+    # Test for missing values handling
+    def test_missing_values(self):
+        df_with_missing = df.copy()
+        df_with_missing.loc[0, 'building_age'] = None
+
+        # Fill missing values (forward fill for simplicity)
+        df_with_missing.fillna(method='ffill', inplace=True)
+
+        # Check if there are no missing values
+        self.assertEqual(df_with_missing.isnull().sum().sum(), 0, "Missing values still exist after imputation")
+
+    # Test model evaluation metrics (mean squared error and r-squared)
+    def test_evaluation_metrics(self):
+        rf_model = RandomForestRegressor(n_estimators=100, random_state=42)
+        rf_model.fit(X_train, y_train)
+        
+        y_pred = rf_model.predict(X_test)
+
+        # Calculate metrics
+        rmse = mean_squared_error(y_test, y_pred, squared=False)
+        r2 = r2_score(y_test, y_pred)
+
+        # Check that RMSE is a non-negative value and R2 is in the valid range
+        self.assertGreaterEqual(rmse, 0, "RMSE should be greater than or equal to 0")
+        self.assertTrue(0 <= r2 <= 1, "R2 score should be between 0 and 1")
+
+if __name__ == '__main__':
+    unittest.main()
