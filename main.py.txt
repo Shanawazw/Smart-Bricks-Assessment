@@ -1,0 +1,144 @@
+import numpy as np
+import pandas as pd
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import mean_squared_error, r2_score
+from sklearn.ensemble import RandomForestRegressor
+from sklearn.svm import SVR
+from sklearn.linear_model import LinearRegression
+from sklearn.preprocessing import StandardScaler
+from sklearn.feature_selection import SelectKBest, f_regression
+import keras
+from keras.models import Sequential
+from keras.layers import Dense
+from keras.optimizers import Adam
+import keras_tuner as kt
+from sklearn.pipeline import Pipeline
+import joblib
+
+# Helper function to preprocess the data
+def preprocess_data(df):
+    # Handling missing values
+    df.fillna(df.mean(), inplace=True)
+    
+    # Convert categorical columns to category type
+    categorical_columns = df.select_dtypes(include=['object']).columns
+    for col in categorical_columns:
+        df[col] = df[col].astype('category')
+    
+    # Convert datetime columns to numeric
+    datetime_columns = df.select_dtypes(include=['datetime']).columns
+    for col in datetime_columns:
+        df[col] = pd.to_datetime(df[col]).astype(int) / 10**9  # Convert datetime to numeric (seconds)
+    
+    # Feature scaling (optional for certain models)
+    scaler = StandardScaler()
+    numeric_columns = df.select_dtypes(include=['float64', 'int64']).columns
+    df[numeric_columns] = scaler.fit_transform(df[numeric_columns])
+    
+    return df
+
+# Load dataset
+def load_data():
+    # Example loading data
+    df = pd.read_csv('your_dataset.csv')  # Load your dataset here
+    return df
+
+# Feature selection function (using SelectKBest for univariate selection)
+def feature_selection(X, y):
+    selector = SelectKBest(f_regression, k=10)
+    X_new = selector.fit_transform(X, y)
+    selected_features = X.columns[selector.get_support()]
+    return X_new, selected_features
+
+# Define and train base models
+def train_base_models(X_train, y_train):
+    # Base models: RandomForest, SVM, and LinearRegression
+    models = {
+        'RandomForest': RandomForestRegressor(n_estimators=100, random_state=42),
+        'SVR': SVR(kernel='rbf'),
+        'LinearRegression': LinearRegression()
+    }
+
+    predictions = {}
+    for model_name, model in models.items():
+        model.fit(X_train, y_train)
+        predictions[model_name] = model.predict(X_train)  # Train and predict on the same data for simplicity
+    
+    return models, predictions
+
+# Create and train the meta-learner (Neural Network in this case)
+def create_meta_learner(X_meta_train, y_train):
+    # Define a simple neural network for meta-learner
+    model = Sequential()
+    model.add(Dense(64, input_dim=X_meta_train.shape[1], activation='relu'))
+    model.add(Dense(32, activation='relu'))
+    model.add(Dense(1))
+    model.compile(optimizer=Adam(), loss='mean_squared_error')
+
+    # Train the model
+    model.fit(X_meta_train, y_train, epochs=10, batch_size=32, verbose=1)
+    
+    return model
+
+# Hyperparameter tuning for meta-learner using Keras Tuner (optional)
+def tune_meta_learner_hyperparameters(X_meta_train, y_train):
+    def build_model(hp):
+        model = Sequential()
+        model.add(Dense(hp.Int('units', min_value=32, max_value=128, step=32), input_dim=X_meta_train.shape[1], activation='relu'))
+        model.add(Dense(hp.Int('units_2', min_value=32, max_value=128, step=32), activation='relu'))
+        model.add(Dense(1))
+        model.compile(optimizer=Adam(learning_rate=hp.Float('learning_rate', min_value=1e-5, max_value=1e-2, sampling='LOG')),
+                      loss='mean_squared_error')
+        return model
+
+    tuner = kt.Hyperband(build_model, objective='val_loss', max_epochs=10, factor=3, directory='kt_dir', project_name='meta_learner')
+    tuner.search(X_meta_train, y_train, epochs=10, validation_data=(X_meta_train, y_train))
+    best_model = tuner.get_best_models(num_models=1)[0]
+    
+    return best_model
+
+# Evaluate model performance
+def evaluate_model(model, X_test, y_test):
+    y_pred = model.predict(X_test)
+    rmse = np.sqrt(mean_squared_error(y_test, y_pred))
+    r2 = r2_score(y_test, y_pred)
+    print(f'RMSE: {rmse}')
+    print(f'R-squared: {r2}')
+
+# Main function to orchestrate the entire pipeline
+def main():
+    # Load data
+    df = load_data()
+
+    # Separate features and target variable
+    X = df.drop(columns=['target'])  # Replace 'target' with the actual target column
+    y = df['target']
+
+    # Data preprocessing
+    X = preprocess_data(X)
+
+    # Split data into training and testing sets
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+
+    # Feature selection
+    X_train_selected, selected_features = feature_selection(X_train, y_train)
+    print(f'Selected features: {selected_features}')
+
+    # Train base models
+    base_models, base_predictions = train_base_models(X_train_selected, y_train)
+
+    # Stack the base model predictions to form the meta-feature matrix for meta-learner
+    X_meta_train = np.column_stack(list(base_predictions.values()))
+
+    # Train the meta-learner (Neural Network)
+    meta_model = create_meta_learner(X_meta_train, y_train)
+
+    # Evaluate the meta-learner model
+    evaluate_model(meta_model, X_meta_train, y_train)
+
+    # Save the model for later use (optional)
+    joblib.dump(base_models, 'base_models.pkl')
+    meta_model.save('meta_model.h5')
+
+if __name__ == "__main__":
+    main()
