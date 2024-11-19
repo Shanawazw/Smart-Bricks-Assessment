@@ -1,0 +1,80 @@
+# File paths
+DATA_PATH = './data/'  # Path to your dataset directory
+TRAINING_DATA_FILE = DATA_PATH + 'train_data.csv'  # Path to the training data
+TESTING_DATA_FILE = DATA_PATH + 'test_data.csv'    # Path to the testing data
+OUTPUT_DIR = './output/'  # Directory to store the output results (e.g., model, predictions)
+
+# Model parameters
+MODEL_PARAMS = {
+    'random_forest': {
+        'n_estimators': 100,
+        'max_depth': 10,
+        'min_samples_split': 2,
+        'min_samples_leaf': 1,
+        'random_state': 42
+    },
+    'xgboost': {
+        'n_estimators': 100,
+        'learning_rate': 0.1,
+        'max_depth': 6,
+        'subsample': 0.8,
+        'colsample_bytree': 0.8,
+        'random_state': 42
+    },
+    'svm': {
+        'kernel': 'rbf',  # Radial basis function kernel
+        'C': 1.0,         # Regularization parameter
+        'gamma': 'scale', # Kernel coefficient
+    },
+    'neural_network': {
+        'hidden_layer_sizes': (100,),  # Number of neurons in the hidden layers
+        'activation': 'relu',          # Activation function
+        'solver': 'adam',              # Solver for weight optimization
+        'max_iter': 200,               # Maximum number of iterations
+        'random_state': 42
+    }
+}
+
+# Hyperparameter tuning parameters
+HYPERPARAMETER_TUNING = {
+    'bayesian_optimization': {
+        'n_iter': 50,  # Number of iterations for optimization
+        'acq_func': 'ei',  # Acquisition function: 'ei' (Expected Improvement), 'ucb' (Upper Confidence Bound), or 'pi' (Probability of Improvement)
+        'random_state': 42
+    }
+}
+
+# Evaluation metrics
+EVALUATION_METRICS = ['RMSE', 'R2', 'MAE']
+
+# Random seed for reproducibility
+SEED = 42
+
+# Model selection parameters
+MODEL_SELECTION = {
+    'base_models': ['random_forest', 'xgboost', 'svm', 'neural_network'],  # Models to include in the base-level ensemble
+    'meta_learner': 'random_forest',  # Meta-learner model for stacking
+    'stacking_method': 'average'  # Method to combine base models' predictions ('average', 'majority', etc.)
+}
+
+# Feature selection parameters
+FEATURE_SELECTION = {
+    'univariate': {
+        'score_func': 'f_classif',  # Select the scoring function ('f_classif', 'chi2', etc.)
+        'k': 10  # Number of top features to select
+    },
+    'recursive_elimination': {
+        'n_features_to_select': 10  # Number of features to select via RFE
+    }
+}
+
+# Neural network training parameters (for meta-learner)
+NEURAL_NETWORK_META_LEARNER = {
+    'hidden_layer_sizes': (100, 50),  # Two hidden layers with 100 and 50 neurons
+    'activation': 'tanh',
+    'solver': 'adam',
+    'max_iter': 500
+}
+
+# Other parameters
+LOGGING_LEVEL = 'INFO'  # Logging level (INFO, DEBUG, WARNING, ERROR)
